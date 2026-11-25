@@ -231,30 +231,35 @@ app.get("/api/herds/:id", (req, res) => {
   const members = db.prepare("SELECT * FROM herd_members WHERE herd_id = ? ORDER BY kind, status DESC, name").all(req.params.id);
   res.json({ ...herd, stallion, members });
 });
-app.post("/api/herds/:id/members", (req, res) => {
+app.post("/api/herds/:id/members", upload.single("image"), (req, res) => {
   if (!db.prepare("SELECT id FROM herds WHERE id = ?").get(req.params.id)) return res.status(404).json({ error: "Бүлэг олдсонгүй" });
   const name = String(req.body.name || "").trim();
   const kind = String(req.body.kind || "");
   if (!name) return res.status(400).json({ error: "Гишүүний нэр шаардлагатай" });
   if (!["mare", "foal"].includes(kind)) return res.status(400).json({ error: "Гишүүний төрөл буруу байна" });
   const result = db.prepare("INSERT INTO herd_members (herd_id,name,kind,sex,age,color,status,image) VALUES (?,?,?,?,?,?,?,?)")
-    .run(req.params.id, name, kind, String(req.body.sex || "").trim(), String(req.body.age || "").trim(), String(req.body.color || "").trim(), String(req.body.status || "").trim(), "");
+    .run(req.params.id, name, kind, String(req.body.sex || "").trim(), String(req.body.age || "").trim(), String(req.body.color || "").trim(), String(req.body.status || "").trim(), req.file ? `/uploads/${req.file.filename}` : "");
   res.status(201).json(db.prepare("SELECT * FROM herd_members WHERE id = ?").get(result.lastInsertRowid));
 });
-app.put("/api/herds/:herdId/members/:memberId", (req, res) => {
+app.put("/api/herds/:herdId/members/:memberId", upload.single("image"), (req, res) => {
   const member = db.prepare("SELECT * FROM herd_members WHERE id = ? AND herd_id = ?").get(req.params.memberId, req.params.herdId);
   if (!member) return res.status(404).json({ error: "Бүлгийн гишүүн олдсонгүй" });
   const name = String(req.body.name ?? member.name).trim();
   const kind = String(req.body.kind ?? member.kind);
   if (!name) return res.status(400).json({ error: "Гишүүний нэр шаардлагатай" });
   if (!["mare", "foal"].includes(kind)) return res.status(400).json({ error: "Гишүүний төрөл буруу байна" });
-  db.prepare("UPDATE herd_members SET name = ?, kind = ?, sex = ?, age = ?, color = ?, status = ? WHERE id = ?")
-    .run(name, kind, String(req.body.sex ?? member.sex).trim(), String(req.body.age ?? member.age).trim(), String(req.body.color ?? member.color).trim(), String(req.body.status ?? member.status).trim(), member.id);
+  const image = req.file ? `/uploads/${req.file.filename}` : member.image || "";
+  db.prepare("UPDATE herd_members SET name = ?, kind = ?, sex = ?, age = ?, color = ?, status = ?, image = ? WHERE id = ?")
+    .run(name, kind, String(req.body.sex ?? member.sex).trim(), String(req.body.age ?? member.age).trim(), String(req.body.color ?? member.color).trim(), String(req.body.status ?? member.status).trim(), image, member.id);
+  if (req.file && member.image !== image) removeUploadedFile(member.image);
   res.json(db.prepare("SELECT * FROM herd_members WHERE id = ?").get(member.id));
 });
 app.delete("/api/herds/:herdId/members/:memberId", (req, res) => {
+  const member = db.prepare("SELECT * FROM herd_members WHERE id = ? AND herd_id = ?").get(req.params.memberId, req.params.herdId);
+  if (!member) return res.status(404).json({ error: "Бүлгийн гишүүн олдсонгүй" });
   const result = db.prepare("DELETE FROM herd_members WHERE id = ? AND herd_id = ?").run(req.params.memberId, req.params.herdId);
   if (!result.changes) return res.status(404).json({ error: "Бүлгийн гишүүн олдсонгүй" });
+  removeUploadedFile(member.image);
   res.status(204).end();
 });
 

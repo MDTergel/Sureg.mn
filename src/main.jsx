@@ -227,14 +227,13 @@ function App() {
   const saveHerdMember = async (event) => {
     event.preventDefault();
     if (!selectedHerdId) return;
-    const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const formData = new FormData(event.currentTarget);
     try {
       const response = await fetch(editingHerdMember
         ? `/api/herds/${encodeURIComponent(selectedHerdId)}/members/${editingHerdMember.id}`
         : `/api/herds/${encodeURIComponent(selectedHerdId)}/members`, {
         method: editingHerdMember ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: formData,
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Гишүүний мэдээлэл хадгалагдсангүй");
@@ -429,7 +428,9 @@ function App() {
               <div className="herd-members-list">
                 {visibleMembers.map((member) => (
                   <article className="herd-member" key={member.id}>
-                    <span className={`herd-member-icon ${member.kind === "mare" ? "mare" : "foal"}`}>{member.kind === "mare" ? <Heart size={17}/> : <Baby size={17}/>}</span>
+                    {member.image
+                      ? <img className="herd-member-photo" src={member.image} alt={member.name}/>
+                      : <span className={`herd-member-icon ${member.kind === "mare" ? "mare" : "foal"}`}>{member.kind === "mare" ? <Heart size={17}/> : <Baby size={17}/>}</span>}
                     <button className="herd-member-name" onClick={() => setDetailHerdMember(member)}><strong>{member.name}</strong><small>{member.kind === "mare" ? "Гүү" : member.sex === "Эр" ? "Эр төл" : "Эм төл"}</small></button>
                     <span className="herd-member-color">{member.color || "Зүс —"}</span>
                     <span className="herd-member-age">{member.age || "Нас бүртгээгүй"}</span>
@@ -624,6 +625,10 @@ function App() {
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowHerdMemberForm(false)}>
           <form className="horse-modal" onSubmit={saveHerdMember}>
             <div className="modal-heading"><div><span className="eyebrow">{herdDetail?.name || "СҮРГИЙН БҮЛЭГ"}</span><h2>{editingHerdMember ? "Гишүүн засах" : "Шинэ гишүүн бүртгэх"}</h2></div><button type="button" onClick={() => { setShowHerdMemberForm(false); setEditingHerdMember(null); }}>×</button></div>
+            <label className="herd-member-upload">
+              <input type="file" name="image" accept="image/jpeg,image/png,image/webp"/>
+              <span>{editingHerdMember?.image ? "Зураг солих" : "Зураг сонгох"}<small>JPG, PNG эсвэл WebP · 8 MB хүртэл</small></span>
+            </label>
             <div className="form-grid">
               <label>Нэр<input name="name" required defaultValue={editingHerdMember?.name || ""} placeholder="Гишүүний нэр"/></label>
               <label>Төрөл<select name="kind" defaultValue={editingHerdMember?.kind || "mare"}><option value="mare">Гүү</option><option value="foal">Төл</option></select></label>
@@ -640,6 +645,7 @@ function App() {
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDetailHerdMember(null)}>
           <section className="horse-modal herd-member-detail" role="dialog" aria-modal="true" aria-labelledby="herd-member-title">
             <div className="modal-heading"><div><span className="eyebrow">{herdDetail?.name || "СҮРГИЙН БҮЛЭГ"}</span><h2 id="herd-member-title">{detailHerdMember.name}</h2></div><button type="button" onClick={() => setDetailHerdMember(null)}>×</button></div>
+            {detailHerdMember.image && <img className="herd-member-detail-photo" src={detailHerdMember.image} alt={detailHerdMember.name}/>}
             <dl className="herd-member-details">
               <div><dt>Төрөл</dt><dd>{detailHerdMember.kind === "mare" ? "Гүү" : "Төл"}</dd></div>
               <div><dt>Хүйс</dt><dd>{detailHerdMember.sex || "Бүртгээгүй"}</dd></div>
