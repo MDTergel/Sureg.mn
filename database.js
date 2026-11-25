@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import { neon } from "@neondatabase/serverless";
 import path from "node:path";
 
@@ -39,6 +38,10 @@ const postgresSchema = `
     kind TEXT NOT NULL CHECK (kind IN ('mare', 'foal')), sex TEXT NOT NULL DEFAULT '',
     age TEXT DEFAULT '', status TEXT DEFAULT '', image TEXT DEFAULT '', color TEXT DEFAULT '',
     FOREIGN KEY (herd_id) REFERENCES herds(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS files (
+    name TEXT PRIMARY KEY, mime TEXT NOT NULL, data TEXT NOT NULL,
+    created_at TEXT DEFAULT (CURRENT_TIMESTAMP::TEXT)
   );
 `;
 
@@ -123,7 +126,8 @@ function createPostgresDatabase(databaseUrl) {
   };
 }
 
-function createSqliteDatabase(databasePath) {
+async function createSqliteDatabase(databasePath) {
+  const { default: Database } = await import("better-sqlite3");
   const sqlite = new Database(databasePath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
@@ -157,11 +161,12 @@ export async function createDatabase(databasePath = path.resolve("data", "unaga.
     await database.initialize();
     return database;
   }
-  return createSqliteDatabase(databasePath);
+  return await createSqliteDatabase(databasePath);
 }
 
 export async function migrateSqliteToNeon(databasePath, databaseUrl = process.env.DATABASE_URL) {
   if (!databaseUrl) throw new Error("Set DATABASE_URL to the Neon connection string before migrating.");
+  const { default: Database } = await import("better-sqlite3");
   const sqlite = new Database(databasePath, { readonly: true });
   try {
     const postgres = createPostgresDatabase(databaseUrl);

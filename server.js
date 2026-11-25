@@ -8,6 +8,10 @@ import { createDatabase } from "./database.js";
 
 const app = express();
 const port = 3001;
+const usePostgres = Boolean(process.env.DATABASE_URL);
+if (process.env.VERCEL && !usePostgres) {
+  console.error("DATABASE_URL тохируулаагүй байна! Өгөгдөл түр хадгалагдаж, refresh хийхэд алга болно.");
+}
 const dataDir = process.env.VERCEL ? "/tmp/data" : path.resolve("data");
 const uploadDir = process.env.VERCEL ? "/tmp/uploads" : path.resolve("uploads");
 fs.mkdirSync(dataDir, { recursive: true });
@@ -47,20 +51,59 @@ if (!(await db.prepare("SELECT id FROM herds WHERE id = ?").get("herd-default"))
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
+
+// Neon (PostgreSQL) ашиглаж байвал зураг/файлыг өгөгдлийн санд хадгална (Vercel дээр диск байнгын биш).
+// Локалд (DATABASE_URL байхгүй) uploads/ хавтас руу хэвээр хадгална.
+app.get("/uploads/:name", async (req, res, next) => {
+  if (db.kind !== "postgres") return next();
+  try {
+    const row = await db.prepare("SELECT mime, data FROM files WHERE name = ?").get(path.basename(req.params.name));
+    if (!row) return res.status(404).end();
+    res.set("Content-Type", row.mime);
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(Buffer.from(row.data, "base64"));
+  } catch (error) {
+    next(error);
+  }
+});
 app.use("/uploads", express.static(uploadDir));
+
 const removeUploadedFile = (urlPath) => {
   if (!urlPath?.startsWith("/uploads/")) return;
-  const filePath = path.resolve(uploadDir, path.basename(urlPath));
+  const name = path.basename(urlPath);
+  if (db.kind === "postgres") {
+    db.prepare("DELETE FROM files WHERE name = ?").run(name).catch(() => {});
+    return;
+  }
+  const filePath = path.resolve(uploadDir, name);
   if (filePath.startsWith(`${uploadDir}${path.sep}`)) fs.rmSync(filePath, { force: true });
 };
 
-const storage = multer.diskStorage({
-  destination: uploadDir,
-  filename: (_req, file, cb) => {
-    const safeName = `${Date.now()}-${crypto.randomBytes(5).toString("hex")}${path.extname(file.originalname).toLowerCase()}`;
-    cb(null, safeName);
+const storage = {
+  _handleFile(_req, file, cb) {
+    const filename = `${Date.now()}-${crypto.randomBytes(5).toString("hex")}${path.extname(file.originalname).toLowerCase()}`;
+    const chunks = [];
+    file.stream.on("data", (chunk) => chunks.push(chunk));
+    file.stream.on("error", cb);
+    file.stream.on("end", async () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        if (db.kind === "postgres") {
+          await db.prepare("INSERT INTO files (name,mime,data) VALUES (?,?,?)").run(filename, file.mimetype, buffer.toString("base64"));
+        } else {
+          fs.writeFileSync(path.join(uploadDir, filename), buffer);
+        }
+        cb(null, { filename, size: buffer.length });
+      } catch (error) {
+        cb(error);
+      }
+    });
   },
-});
+  _removeFile(_req, file, cb) {
+    removeUploadedFile(`/uploads/${file.filename}`);
+    cb(null);
+  },
+};
 const upload = multer({
   storage,
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -80,7 +123,7 @@ const raceFileUpload = multer({
   },
 });
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, db: db.kind }));
 
 const herdSummaryQuery = `
   SELECT h.id, h.name, h.stallion_id, h.description,
