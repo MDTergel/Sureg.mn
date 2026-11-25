@@ -7,7 +7,9 @@
     "dev": "concurrently -k \"vite --host 127.0.0.1 --strictPort\" \"node server.js\"",
     "server": "node server.js",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "migrate:neon": "node migrate-neon.js",
+    "test:neon": "node test-neon.js"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -19,7 +21,8 @@
     "cors": "latest",
     "express": "latest",
     "multer": "latest",
-    "concurrently": "latest"
+    "concurrently": "latest",
+    "@neondatabase/serverless": "latest"
   },
   "devDependencies": {}
 }
