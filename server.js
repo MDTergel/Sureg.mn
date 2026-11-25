@@ -8,8 +8,8 @@ import crypto from "node:crypto";
 
 const app = express();
 const port = 3001;
-const dataDir = path.resolve("data");
-const uploadDir = path.resolve("uploads");
+const dataDir = process.env.VERCEL ? "/tmp/data" : path.resolve("data");
+const uploadDir = process.env.VERCEL ? "/tmp/uploads" : path.resolve("uploads");
 fs.mkdirSync(dataDir, { recursive: true });
 fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -413,4 +413,8 @@ app.use((error, _req, res, next) => {
   res.status(500).json({ error: "Серверийн алдаа гарлаа" });
 });
 
-app.listen(port, "127.0.0.1", () => console.log(`Хурдан Унага API: http://127.0.0.1:${port}`));
+if (!process.env.VERCEL) {
+  app.listen(port, "127.0.0.1", () => console.log(`Хурдан Унага API: http://127.0.0.1:${port}`));
+}
+
+export default app;
